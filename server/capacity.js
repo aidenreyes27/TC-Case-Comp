@@ -3,8 +3,14 @@ import { todayAt, MIN } from './time.js';
 
 export const menuById = Object.fromEntries(MENU.map((m) => [m.id, m]));
 
-export function prepMinsFor(lines) {
-  return lines.reduce((s, l) => s + (menuById[l.itemId]?.prepMins ?? 0) * l.qty, 0);
+// Per-burrito prep time depends on the order type: group orders batch faster.
+export const rateFor = (itemId, kind = 'walkin') => {
+  const m = menuById[itemId];
+  if (!m) return 0;
+  return kind === 'group' ? m.groupPrepMins : m.prepMins;
+};
+export function prepMinsFor(lines, kind = 'walkin') {
+  return lines.reduce((s, l) => s + rateFor(l.itemId, kind) * l.qty, 0);
 }
 export function burritoCount(lines) { return lines.reduce((s, l) => s + l.qty, 0); }
 

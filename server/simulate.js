@@ -11,10 +11,12 @@ import { todayAt, now, MIN } from './time.js';
 import { db, createGroup, addLine, payAndSubmit, HttpError, USERS } from './store.js';
 
 export const LEVELS = {
-  // Calibrated to the owners' "about 60 customers a day" before COVID.
-  low: { walkIns: 35, groups: 2, label: 'Slow day' },
-  normal: { walkIns: 50, groups: 3, label: 'Typical day' },
-  high: { walkIns: 68, groups: 5, label: 'Slammed' },
+  // "2019-like" is calibrated so pen and paper reproduces the 2019 records
+  // (about 82% of lunch orders and 43% of group orders on time, at 2019 staffing).
+  // "More groups" is the growth plan: same walk-ins, twice the group orders.
+  low: { walkIns: 42, groups: 2, label: '2019-like day' },
+  normal: { walkIns: 42, groups: 4, label: 'More groups' },
+  high: { walkIns: 60, groups: 5, label: 'Slammed' },
 };
 const MIX = [['california', 171], ['carne-asada', 160], ['carnitas', 78]]; // 2019 sales mix
 const TYPES = ['construction', 'construction', 'military', 'office', 'students'];
@@ -37,7 +39,7 @@ export function generateDemand(seed, level, day = new Date(now())) {
   const p = LEVELS[level] ?? LEVELS.normal;
   const walkIns = Array.from({ length: p.walkIns }, () => ({
     arrival: Math.round(lunchTime(r, day) / MIN) * MIN,
-    lines: Array.from({ length: r.weighted([[1, 55], [2, 30], [3, 15]]) }, () => ({ itemId: r.weighted(MIX), qty: 1 })),
+    lines: Array.from({ length: r.weighted([[1, 58], [2, 32], [3, 6], [4, 4]]) }, () => ({ itemId: r.weighted(MIX), qty: 1 })), // 2019 order sizes
   }));
   const groups = Array.from({ length: p.groups }, () => {
     const groupType = r.pick(TYPES);
@@ -79,7 +81,7 @@ function runPolicy(demand, policy, staffBySlot, day) {
         createdAt: g.desired - 15 * MIN, visibleAt: g.desired - 15 * MIN, dueAt: g.desired }));
       continue;
     }
-    const need = prepMinsFor(g.lines);
+    const need = prepMinsFor(g.lines, 'group');
     const ranked = slots
       .map((s) => ({ s, at: todayAt(s, day) }))
       .sort((a, b) => Math.abs(a.at - g.desired) - Math.abs(b.at - g.desired));

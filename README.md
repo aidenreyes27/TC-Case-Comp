@@ -40,8 +40,24 @@ See **DEMO.md** for setup, the run of show, and troubleshooting. Short version: 
 4. Back as the lead: Pay (mock card 4242 4242 4242 4242). The order locks and appears under Booked ahead on the counter.
 5. **Counter**: ring up a walk-in, then press Simulate a rush → Slammed. Watch a group get turned away by capacity.
 6. Turn on Auto-cook and set the clock to 20×. Tickets move left to right; the lead's page counts burritos wrapped live. When the group's order is done, the lead gets a browser notification and a green banner. Turn on **Sound on** at the counter to hear new orders arrive.
-7. **Dashboard**: run a simulated day (try seed 2) to compare pen and paper with our app on identical demand.
+7. **Dashboard → Simulator**: run a **2019-like day** (seed 21 is a representative one) to compare pen and paper with our app on identical demand.
 8. Press Write today's brief for the AI summary, for today or for the simulated day. Uses Groq's free tier (`GROQ_API_KEY`), or Claude if `ANTHROPIC_API_KEY` is set.
+
+## Where the numbers come from (2019 operating records, 300 orders)
+- **Prep time per burrito** = estimated_prep_minutes ÷ quantity. Small orders: California 3.4, Carne Asada 4.1, Carnitas 3.7 min. Group orders batch about 13% faster: 2.96, 3.59, 3.25 min.
+- **Staffing**: 2019 lunches ran with 3–4 on shift (average 3.45), so the default is 3 cooks with 4 from 12:00 to 1:00.
+- **Walk-in promise**: 15 minutes, as in 2019. Walk-in order sizes follow 2019 (58% one burrito, 32% two, 6% three, 4% four).
+- **Simulator calibration**: the "2019-like day" level is tuned so pen and paper lands near the 2019 results (about 82% of lunch orders and 43% of group orders on time).
+
+Average of 30 random days:
+
+| Scenario | Pen and paper (lunch / groups on time) | Our app (lunch / groups on time) |
+| --- | --- | --- |
+| 2019-like day | 86% / 55% | 96% / 85% |
+| More groups (growth plan) | 66% / 32% | 87% / 69% |
+| Slammed | 30% / 5% | 45% / 31% |
+
+Growth beyond 2019 volume needs more cooks at lunch; the simulator and the AI brief both show this.
 
 ## Key rules
 - Slot capacity = cooks on shift × 30 prep minutes; 40% is held back for walk-ins.

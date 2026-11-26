@@ -10,10 +10,18 @@ const pay = { cardName: 'Carlos R', cardNumber: '4242 4242 4242 4242', expiry: '
 beforeEach(() => { s.resetStore(); setClock({ time: '10:15', speed: 1 }); });
 
 test('slot picker blocks a slot over capacity', () => {
-  const g = s.createGroup(owner, { groupName: 'Big crew', groupType: 'construction', slot: '12:00' });
-  // 12:00 has 3 cooks -> 90 prep mins, 60% bookable = 54 mins = 18 Californias
-  for (let i = 0; i < 18; i++) s.addLine(g.code, { personName: `P${i}`, itemId: 'california', qty: 1 });
-  assert.throws(() => s.addLine(g.code, { personName: 'one more', itemId: 'california', qty: 1 }), /full/);
+  const slot = s.slotsView().find((x) => x.time === '12:30');
+  const fits = Math.floor(slot.groupableMins / 2.96); // California group prep time from 2019
+  let added = 0;
+  // Several groups book the same slot until it's full
+  outer: for (let gi = 0; gi < 5; gi++) {
+    const g = s.createGroup(owner, { groupName: `Crew ${gi}`, groupType: 'construction', slot: '12:30' });
+    for (let i = 0; i < 10; i++) {
+      try { s.addLine(g.code, { personName: `P${i}`, itemId: 'california', qty: 1 }); added++; }
+      catch (e) { assert.match(e.message, /full/); break outer; }
+    }
+  }
+  assert.equal(added, fits);
 });
 
 test('input validation rejects bad lines', () => {

@@ -26,7 +26,7 @@ export function buildPayload(source, metrics, extra = {}) {
     source,
     targets: { groupOnTimePct: 85, lunchOnTimePct: 90 },
     settings: { walkInReservePct: SETTINGS.walkInReserve * 100, walkInPromiseMins: SETTINGS.walkInPromiseMins },
-    menu: MENU.map(({ name, price, cost, prepMins }) => ({ name, price, cost, prepMins })),
+    menu: MENU.map(({ name, price, cost, prepMins, groupPrepMins }) => ({ name, price, cost, prepMinsWalkIn: prepMins, prepMinsGroup: groupPrepMins })),
     metrics,
     ...extra,
   };

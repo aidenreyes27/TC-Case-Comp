@@ -46,7 +46,7 @@ Rehearsed end to end: 3 judges each sign in, start an order, add burritos, pay, 
    notification on Android and laptops, and a chime if they turned sound on).
 7. Counter → **Picked up**. Their tracker moves to Picked up.
 8. Dashboard → **Today's orders** shows the judges' orders next to the fake ones → **Simulator** tab
-   → **Write today's brief**.
+   → **2019-like day**, seed **21** → **Run simulated day** → back to Today → **Write today's brief**.
 
 ## Don't break it mid-demo
 

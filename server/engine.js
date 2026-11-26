@@ -1,7 +1,7 @@
 // Kitchen engine: decides which order to cook next and simulates cooks working.
 // Used by the live auto-cook toggle and by the offline day simulator, so the
 // demo and the "before vs after" numbers run on the same rules.
-import { menuById, latestStart, slotTimes } from './capacity.js';
+import { latestStart, slotTimes, rateFor } from './capacity.js';
 import { todayAt, MIN } from './time.js';
 
 export const EARLY_START_MINS = 20; // never start a booked group more than this early
@@ -21,7 +21,7 @@ export function makeUnits(order) {
       id: `${order.id}-${n++}`,
       itemId: l.itemId,
       person: l.personName || null,
-      workLeft: menuById[l.itemId].prepMins,
+      workLeft: rateFor(l.itemId, order.kind),
       doneAt: null,
     })),
   );

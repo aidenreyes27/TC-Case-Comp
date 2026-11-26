@@ -2,7 +2,7 @@
 // Every rule that protects the kitchen (capacity, locks, payment) lives here,
 // on the server, so the UI can't bypass it. supabase/schema.sql mirrors these tables.
 import { MENU, DEFAULT_STAFF, SETTINGS, OWNER_EMAIL } from './config.js';
-import { menuById, prepMinsFor, burritoCount, slotTimes, slotCapacity, lockTime, latestStart } from './capacity.js';
+import { menuById, prepMinsFor, rateFor, burritoCount, slotTimes, slotCapacity, lockTime, latestStart } from './capacity.js';
 import { makeUnits, cookStep, sortQueue, cookable, priorityOf, staffAt, remainingWork } from './engine.js';
 import { now, todayAt, MIN } from './time.js';
 
@@ -46,11 +46,11 @@ export function slotsView(t = now()) {
     const cap = slotCapacity(staff);
     const groupBooked = db.orders
       .filter((o) => o.kind === 'group' && o.slot === time && active(o))
-      .reduce((s, o) => s + prepMinsFor(o.lines), 0);
+      .reduce((s, o) => s + prepMinsFor(o.lines, 'group'), 0);
     const windowStart = startAt - 30 * MIN;
     const walkInUsed = db.orders
       .filter((o) => o.kind === 'walkin' && o.dueAt > windowStart && o.dueAt <= startAt)
-      .reduce((s, o) => s + prepMinsFor(o.lines), 0);
+      .reduce((s, o) => s + prepMinsFor(o.lines, 'walkin'), 0);
     return {
       time, startAt, staff,
       capacityMins: cap.total, groupableMins: cap.groupable,
@@ -75,7 +75,7 @@ const fmt = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', mi
 
 // ---------- group orders ----------
 function lockFor(dueAt, lines) {
-  return lockTime(dueAt, Math.max(prepMinsFor(lines), 3), staffAt(dueAt, db.staffBySlot));
+  return lockTime(dueAt, Math.max(prepMinsFor(lines, 'group'), 3), staffAt(dueAt, db.staffBySlot));
 }
 function groupMeta(o) { return { lockAt: lockFor(o.dueAt, o.lines) }; }
 
@@ -130,7 +130,7 @@ export function addLine(code, { personName, itemId, qty, note }) {
   if (!Number.isInteger(q) || q < 1 || q > SETTINGS.maxQtyPerLine) fail(400, `Quantity must be 1–${SETTINGS.maxQtyPerLine}.`);
   if (burritoCount(o.lines) + q > SETTINGS.maxGroupSize) fail(400, `Group orders max out at ${SETTINGS.maxGroupSize} burritos. Start a second order for the rest.`);
   const n = String(note ?? '').trim().slice(0, 80);
-  assertCapacity(o.slot, q * menuById[itemId].prepMins);
+  assertCapacity(o.slot, q * rateFor(itemId, 'group'));
   assertStillTime(o, [...o.lines, { itemId, qty: q }]);
   const line = { id: newId('l'), personName: person, itemId, qty: q, note: n, addedAt: now() };
   o.lines.push(line);
@@ -152,7 +152,7 @@ export function moveGroup(user, code, slot) {
   const s = slotsView().find((x) => x.time === slot);
   if (!s || !s.bookable) fail(400, 'That pickup time isn’t available.');
   if (slot === o.slot) return o;
-  if (s.availableMins < prepMinsFor(o.lines)) fail(409, `${fmt(s.startAt)} doesn’t have room for ${burritoCount(o.lines)} burritos.`);
+  if (s.availableMins < prepMinsFor(o.lines, 'group')) fail(409, `${fmt(s.startAt)} doesn’t have room for ${burritoCount(o.lines)} burritos.`);
   assertStillTime(o, o.lines, s.startAt);
   o.slot = slot; o.dueAt = s.startAt;
   return o;
@@ -216,7 +216,7 @@ export function toggleUnit(user, orderId, unitId) {
   if (o.status === 'open') fail(409, 'This group is still collecting burritos.');
   if (['picked_up', 'no_show', 'released'].includes(o.status)) fail(409, 'This order is already closed.');
   const u = o.units.find((x) => x.id === unitId) ?? fail(404, 'Burrito not found.');
-  if (u.doneAt) { u.doneAt = null; u.workLeft = menuById[u.itemId].prepMins; o.readyAt = null; o.status = 'locked'; }
+  if (u.doneAt) { u.doneAt = null; u.workLeft = rateFor(u.itemId, o.kind); o.readyAt = null; o.status = 'locked'; }
   else { u.doneAt = now(); u.workLeft = 0; }
   refreshStatus(o);
   return o;
@@ -282,13 +282,13 @@ export function tick() {
 export function orderView(o, t = now()) {
   const staff = staffAt(o.dueAt, db.staffBySlot);
   const units = o.units ?? [];
-  const startBy = units.length ? priorityOf(o, db.staffBySlot) : latestStart(o.dueAt, prepMinsFor(o.lines), staff);
+  const startBy = units.length ? priorityOf(o, db.staffBySlot) : latestStart(o.dueAt, prepMinsFor(o.lines, o.kind), staff);
   const done = units.filter((u) => u.doneAt).length;
   return {
     ...o,
     total: orderTotal(o),
     burritos: burritoCount(o.lines),
-    prepMins: round1(prepMinsFor(o.lines)),
+    prepMins: round1(prepMinsFor(o.lines, o.kind)),
     done,
     startBy,
     lockAt: o.kind === 'group' ? groupMeta(o).lockAt : null,

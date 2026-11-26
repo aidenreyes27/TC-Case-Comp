@@ -27,7 +27,7 @@ export function computeMetrics(orders, t, staffBySlot) {
     const end = todayAt(time, day);
     const inWindow = submitted.filter((o) => o.dueAt > end - 30 * MIN && o.dueAt <= end);
     const staff = staffBySlot[time] ?? 2;
-    const booked = inWindow.reduce((s, o) => s + prepMinsFor(o.lines), 0);
+    const booked = inWindow.reduce((s, o) => s + prepMinsFor(o.lines, o.kind), 0);
     const g = inWindow.filter((o) => o.kind === 'group');
     const late = inWindow.filter((o) => (o.readyAt ? o.readyAt > o.dueAt : t > o.dueAt)).length;
     return { time, staff, bookedMins: r2(booked), capacityMins: staff * 30, utilization: pct(booked, staff * 30),

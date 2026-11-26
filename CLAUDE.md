@@ -12,7 +12,7 @@ Success metric: group on-time rate from 43% (2019) to 85%+. Lunch on-time 82% to
 - `server/store.js` – in-memory data and every business rule (validation, capacity, locks, mock payment). Rules live here, never only in the UI.
 - `server/simulate.js` – seeded demand generator, live rush, pen-and-paper vs. app comparison.
 - `server/metrics.js` – the one definition of "on time" and all dashboard numbers.
-- `server/ai.js` – end-of-day brief via the Anthropic API (metrics only, no customer names).
+- `server/ai.js` – end-of-day brief (metrics only, no customer names). Groq free tier by default (GROQ_API_KEY, model openai/gpt-oss-120b); Claude instead if ANTHROPIC_API_KEY is set.
 - `server/auth.js` – crew leads: Google via Supabase (token checked server-side); staff: email + password (scrypt). Bearer-token sessions.
 - `server/index.js` – Express routes.
 - `src/lib/supabase.js` – Supabase client (Google OAuth only).

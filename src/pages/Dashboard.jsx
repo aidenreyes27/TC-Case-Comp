@@ -216,7 +216,7 @@ function AiBrief({ hasSim }) {
           ))}
         </div>
       </div>
-      <p className="mt-1 text-sm text-paper/60">Claude reads the day’s numbers and writes a short brief for Alden, Andrew, and the investors, with fixes for tomorrow.</p>
+      <p className="mt-1 text-sm text-paper/60">AI reads the day’s numbers and writes a short brief for the owners and investors, with fixes for tomorrow.</p>
       {!brief && !busy && <button className="btn-primary mt-6 self-start" onClick={gen}>Write today’s brief</button>}
       {busy && <p className="mt-6 animate-pulse text-paper/70">Reading today’s orders…</p>}
       {err && <p className="mt-4 rounded-lg bg-chile/90 px-3 py-2 text-sm font-bold">{err}</p>}

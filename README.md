@@ -5,7 +5,7 @@ Group ordering with capacity-limited pickup slots, a shared counter queue, and a
 ## Run it
 ```bash
 npm install
-cp .env.example .env      # add ANTHROPIC_API_KEY for the AI brief
+cp .env.example .env      # add GROQ_API_KEY (free) for the AI brief
 npm run dev               # web: http://localhost:5173  api: http://localhost:3001
 npm test
 ```
@@ -37,7 +37,7 @@ How it works: the browser signs in with Google through Supabase, then sends the 
 5. **Counter**: ring up a walk-in, then press Simulate a rush → Slammed. Watch a group get turned away by capacity.
 6. Turn on Auto-cook and set the clock to 20×. Tickets move left to right; the lead's page counts burritos wrapped live.
 7. **Dashboard**: run a simulated day (try seed 2) to compare pen and paper with our app on identical demand.
-8. Press Write today's brief for the AI summary, for today or for the simulated day.
+8. Press Write today's brief for the AI summary, for today or for the simulated day. Uses Groq's free tier (`GROQ_API_KEY`), or Claude if `ANTHROPIC_API_KEY` is set.
 
 ## Key rules
 - Slot capacity = cooks on shift × 30 prep minutes; 40% is held back for walk-ins.

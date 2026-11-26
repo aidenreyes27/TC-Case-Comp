@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { STATUS } from './LeadHome.jsx';
+import InviteQR from '../components/InviteQR.jsx';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, Legend, CartesianGrid } from 'recharts';
 import Shell from '../components/Shell.jsx';
 import { api } from '../api.js';
@@ -7,18 +10,36 @@ import { money, pct, slotLabel, time } from '../lib/format.js';
 
 const C = { ink: '#16302B', marigold: '#E9A21B', chile: '#C23B22', nopal: '#3F8F4E', pacific: '#2D6A8A', line: '#D3DAD2' };
 
+const TABS = [['today', 'Today'], ['simulator', 'Simulator']];
+
 export default function Dashboard() {
   const { data, reload } = usePoll('/metrics', 3000);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'simulator' ? 'simulator' : 'today';
   const live = data?.live;
   return (
     <Shell wide>
       <div className="flex flex-wrap items-end gap-4">
         <div className="mr-auto">
-          <h1 className="text-4xl font-extrabold">Today at Burrito Barrio</h1>
-          <p className="text-ink/60">Live numbers update every few seconds{live ? `, as of ${time(live.asOf)}` : ''}.</p>
+          <h1 className="text-4xl font-extrabold">{tab === 'today' ? 'Today at Burrito Barrio' : 'Pen and paper vs. our app'}</h1>
+          <p className="text-ink/60">{tab === 'today' ? `Live numbers update every few seconds${live ? `, as of ${time(live.asOf)}` : ''}.` : 'Replay a random lunch day through both systems with the same customers and cooks.'}</p>
         </div>
-        <ClockControls onChange={reload} />
+        <div className="flex flex-wrap items-center gap-3">
+          <InviteQR />
+          <ClockControls onChange={reload} />
+        </div>
       </div>
+
+      <div className="mt-5 flex gap-1 border-b-2 border-line" role="tablist">
+        {TABS.map(([k, l]) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setParams(k === 'today' ? {} : { tab: k })}
+            className={`-mb-0.5 border-b-4 px-4 pb-2 pt-1 font-display text-lg font-bold ${tab === k ? 'border-ink text-ink' : 'border-transparent text-ink/50 hover:text-ink'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'simulator' ? <Simulator sim={data?.simulation} levels={data?.levels} onRun={reload} /> : <>
 
       {live && (
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -42,7 +63,8 @@ export default function Dashboard() {
         <AiBrief hasSim={!!data?.simulation} />
       </section>
 
-      <Simulator sim={data?.simulation} levels={data?.levels} onRun={reload} />
+      <OrdersList />
+      </>}
     </Shell>
   );
 }
@@ -136,7 +158,7 @@ function Simulator({ sim, levels, onRun }) {
     <section className="panel mt-6">
       <div className="flex flex-wrap items-end gap-4">
         <div className="mr-auto max-w-2xl">
-          <h2 className="text-2xl font-extrabold">Pen and paper vs. our app</h2>
+          <h2 className="text-2xl font-extrabold">Run a simulated day</h2>
           <p className="text-sm text-ink/60">Generates one random lunch day, then runs it twice through the same kitchen: first-come-first-served tickets, and our booked slots with start-time ordering. Same customers, same cooks. Enter a seed to replay a day exactly.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -187,6 +209,80 @@ function Simulator({ sim, levels, onRun }) {
               </ResponsiveContainer>
             </div>
           </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const FILTERS = [
+  ['all', 'All', () => true],
+  ['group', 'Group', (o) => o.kind === 'group'],
+  ['walkin', 'Walk-in', (o) => o.kind === 'walkin'],
+  ['late', 'Late', (o) => o.late && !['released', 'open'].includes(o.status)],
+  ['issues', 'No-show or released', (o) => ['no_show', 'released'].includes(o.status)],
+];
+
+function OrdersList() {
+  const { data } = usePoll('/orders/today', 3000);
+  const [filter, setFilter] = useState('all');
+  const test = FILTERS.find((f) => f[0] === filter)[2];
+  const rows = (data ?? []).filter(test);
+  const timing = (o) => {
+    if (o.status === 'open') return <span className="text-ink/50">Collecting</span>;
+    if (o.status === 'released') return <span className="text-ink/50">—</span>;
+    if (!o.readyAt) return o.late ? <span className="font-bold text-chile">Overdue</span> : <span className="text-ink/50">Not ready yet</span>;
+    const m = Math.round((o.readyAt - o.dueAt) / 60000);
+    return m <= 0 ? <span className="font-bold text-nopal">On time</span> : <span className="font-bold text-chile">{m} min late</span>;
+  };
+  return (
+    <section className="panel mt-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="mr-auto text-2xl font-extrabold">Today’s orders</h2>
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map(([k, l, f]) => (
+            <button key={k} onClick={() => setFilter(k)} aria-pressed={filter === k}
+              className={`rounded-full border-2 px-3 py-1 text-sm font-bold ${filter === k ? 'border-ink bg-ink text-paper' : 'border-line bg-white hover:border-ink/40'}`}>
+              {l} <span className="opacity-60">{(data ?? []).filter(f).length}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {!data && <div className="mt-4 h-32 animate-pulse rounded-xl bg-paper" />}
+      {data && rows.length === 0 && (
+        <p className="mt-4 rounded-xl border-2 border-dashed border-line p-6 text-center text-ink/60">
+          {data.length === 0 ? 'No orders yet today. Ring up a walk-in on the Counter or simulate a rush.' : 'No orders match this filter.'}
+        </p>
+      )}
+      {rows.length > 0 && (
+        <div className="mt-4 max-h-[28rem] overflow-auto rounded-xl border border-line">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="sticky top-0 bg-paper text-ink/60">
+              <tr>{['Ticket', 'Order', 'Burritos', 'Total', 'Ordered', 'Due', 'Timing', 'Status'].map((h) => <th key={h} className="px-3 py-2 font-bold">{h}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-line bg-white">
+              {rows.map((o) => {
+                const [label, cls] = o.kind === 'walkin' && o.status === 'locked' ? ['In queue', 'bg-marigold/25 text-ink'] : (STATUS[o.status] ?? [o.status, '']);
+                return (
+                  <tr key={o.id} className="hover:bg-paper/60">
+                    <td className="px-3 py-2 font-display text-lg font-extrabold">{o.ticket}</td>
+                    <td className="px-3 py-2">
+                      {o.kind === 'group'
+                        ? <Link to={`/g/${o.code}`} className="font-bold hover:underline">{o.name}</Link>
+                        : <span className="font-bold">{o.name}</span>}
+                      <span className="block text-xs text-ink/50">{o.kind === 'group' ? `Group · ${o.leadName}` : 'Walk-in'}</span>
+                    </td>
+                    <td className="px-3 py-2">{o.burritos}</td>
+                    <td className="px-3 py-2">{money(o.total)}{o.kind === 'group' && !o.paid && <span className="block text-xs text-chile">not paid</span>}</td>
+                    <td className="px-3 py-2 text-ink/70">{time(o.createdAt)}</td>
+                    <td className="px-3 py-2 text-ink/70">{time(o.dueAt)}</td>
+                    <td className="px-3 py-2">{timing(o)}</td>
+                    <td className="px-3 py-2"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${cls}`}>{label}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </section>

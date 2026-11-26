@@ -26,7 +26,7 @@ export const SETTINGS = {
   walkInReserve: 0.4,      // share of each slot's prep minutes held back for walk-ins
   walkInPromiseMins: 15,   // walk-in counts as on time if ready within this
   lockBufferMins: 15,      // group edits lock this long before the latest start time
-  minLeadMins: 20,         // a new group order needs at least this much notice
+  minLeadMins: 30,         // a new group order needs at least this much notice (leaves time to collect and pay)
   maxGroupSize: 40,        // burritos per group order
   maxQtyPerLine: 5,
 };

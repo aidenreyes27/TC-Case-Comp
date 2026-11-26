@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import Shell from '../components/Shell.jsx';
 import { usePoll } from '../lib/hooks.js';
 import { slotLabel, money, GROUP_TYPES } from '../lib/format.js';
+import ReadyAlerts from '../components/ReadyAlerts.jsx';
 
 export const STATUS = {
   open: ['Collecting orders', 'bg-marigold/20 text-ink'],
@@ -22,7 +23,10 @@ export default function LeadHome() {
           <h1 className="text-4xl font-extrabold">Group orders</h1>
           <p className="mt-1 text-ink/60">Book a pickup time, share the link, and pay once to hold your spot.</p>
         </div>
-        <Link to="/lead/new" className="btn-primary px-5 py-3 text-lg">Start a group order</Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <ReadyAlerts />
+          <Link to="/lead/new" className="btn-primary px-5 py-3 text-lg">Start a group order</Link>
+        </div>
       </div>
       {error && <p className="mt-6 text-chile">{error}</p>}
       <div className="mt-8 space-y-3">
@@ -38,7 +42,7 @@ export default function LeadHome() {
             <Link key={o.id} to={`/g/${o.code}`} className="panel flex flex-wrap items-center gap-4 hover:ring-2 hover:ring-ink/20">
               <div className="flex-1">
                 <p className="font-display text-xl font-bold">{o.groupName}</p>
-                <p className="text-sm text-ink/60">{GROUP_TYPES[o.groupType]} · pickup {slotLabel(o.slot)}</p>
+                <p className="text-sm text-ink/60">{GROUP_TYPES[o.groupType]} · pickup {slotLabel(o.slot)} · code <b className="tracking-widest text-ink">{o.code}</b></p>
               </div>
               <span className="text-sm"><b>{o.burritos}</b> burritos · {money(o.total)}</span>
               <span className={`rounded-full px-3 py-1 text-sm font-bold ${cls}`}>{label}</span>

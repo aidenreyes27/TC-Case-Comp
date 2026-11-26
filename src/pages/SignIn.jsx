@@ -18,23 +18,23 @@ export default function SignIn() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
-      <section className="relative flex flex-col justify-between overflow-hidden bg-ink p-8 text-paper lg:p-14">
-        <div className="flex items-center gap-3"><Mark size={42} /><span className="font-display text-2xl font-extrabold">Burrito Barrio</span></div>
-        <div className="max-w-xl py-16">
-          <h1 className="font-display text-5xl font-extrabold leading-[0.95] sm:text-7xl">Lunch for the whole crew, ready when you pull up.</h1>
-          <p className="mt-6 max-w-md text-lg text-paper/75">Book a pickup time the kitchen can actually hit, send one link to your crew, and everyone picks their own burrito.</p>
+      <section className="relative flex flex-col justify-between overflow-hidden bg-ink px-6 py-6 text-paper sm:p-8 lg:p-14">
+        <div className="flex items-center gap-3"><Mark size={36} /><span className="font-display text-xl font-extrabold sm:text-2xl">Burrito Barrio</span></div>
+        <div className="max-w-xl pt-6 sm:py-16">
+          <h1 className="font-display text-4xl font-extrabold leading-[0.95] sm:text-7xl">Lunch for the whole crew, ready when you pull up.</h1>
+          <p className="mt-3 max-w-md text-paper/75 sm:mt-6 sm:text-lg">Book a pickup time the kitchen can actually hit, send one link to your crew, and everyone picks their own burrito.</p>
         </div>
-        <p className="text-sm text-paper/50">Oceanside, CA · California, Carne Asada, Carnitas</p>
-        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full border-[28px] border-marigold/25" />
+        <p className="hidden text-sm text-paper/50 sm:block">Oceanside, CA · California, Carne Asada, Carnitas</p>
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 hidden h-80 w-80 rounded-full border-[28px] border-marigold/25 sm:block" />
       </section>
 
-      <section className="flex items-center justify-center p-6 sm:p-10">
-        <div className="w-full max-w-md space-y-8">
+      <section className="flex items-start justify-center p-5 sm:items-center sm:p-10">
+        <div className="w-full max-w-md space-y-6 sm:space-y-8">
           <JoinByCode />
 
           <div>
             <h2 className="text-2xl font-extrabold">Ordering for a crew?</h2>
-            <p className="mb-4 mt-1 text-ink/60">Crew leads sign in to book a pickup time and get a link to share. The owner can use Google too.</p>
+            <p className="mb-4 mt-1 text-ink/60">Crew leads sign in to book a pickup time and get a link to share. The owner signs in here too.</p>
             <GoogleButton onClick={google} busy={googleBusy} disabled={!supabase} />
             {!supabase && <p className="mt-2 text-sm text-ink/50">Google sign-in turns on once VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are in .env.</p>}
             {error && <p role="alert" className="mt-3 rounded-lg bg-chile/10 px-3 py-2 text-sm font-bold text-chile">{error}</p>}
@@ -91,11 +91,11 @@ function StaffSignIn({ next }) {
   return (
     <div className="border-t border-line pt-6">
       <button className="text-sm font-bold text-ink/60 hover:text-ink" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Owner or counter sign in with password {open ? '−' : '+'}
+        Counter tablet sign in {open ? '−' : '+'}
       </button>
       {open && (
         <form className="mt-4 space-y-3" onSubmit={submit} noValidate>
-          <div><label className="label" htmlFor="se">Email</label><input id="se" className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="you@berkeley.edu" /></div>
+          <div><label className="label" htmlFor="se">Email</label><input id="se" className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" placeholder="counter@burritobarrio.com" /></div>
           <div>
             <label className="label" htmlFor="sp">Password</label>
             <div className="relative">

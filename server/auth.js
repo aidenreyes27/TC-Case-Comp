@@ -1,8 +1,8 @@
 // Two ways in:
 //  - Crew leads: Google sign-in through Supabase. The browser gets a Supabase
 //    access token; we confirm it with Supabase and give back our own session.
-//  - The owner (one fixed email in config.js): Google or email + password.
-//  - Counter staff: email + password (scrypt hashes, Node built-in).
+//  - The owner (one fixed email in config.js): Google only.
+//  - The shared counter tablet: email + password (scrypt hashes, Node built-in).
 // Sessions are random bearer tokens that expire. Crew lead accounts are saved
 // to data/users.json so they survive a server restart; orders do not.
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -44,8 +44,8 @@ function save() {
 // Staff accounts come from env (or demo defaults); crew leads load from disk.
 export function initAuth() {
   const demo = process.env.DEMO_PASSWORD || 'barrio-demo-2026';
-  const pw = { owner: process.env.OWNER_PASSWORD || demo, staff: process.env.STAFF_PASSWORD || demo };
-  for (const u of USERS) if (!u.passwordHash) u.passwordHash = hashPassword(pw[u.role] ?? demo);
+  // Only the counter account has a password. The owner signs in with Google.
+  for (const u of USERS) if (u.role === 'staff' && !u.passwordHash) u.passwordHash = hashPassword(process.env.STAFF_PASSWORD || demo);
   if (process.env.NODE_ENV !== 'test' && existsSync(FILE)) {
     try {
       for (const u of JSON.parse(readFileSync(FILE, 'utf8'))) {
@@ -95,7 +95,8 @@ export function signIn({ email, password }) {
   if (!mail || !password) fail(400, 'Enter your email and password.');
   const f = fails.get(mail);
   if (f && f.until > Date.now()) fail(429, `Too many attempts. Try again in ${Math.ceil((f.until - Date.now()) / 60000)} min.`);
-  const user = USERS.find((u) => u.email === mail && u.role !== 'lead');
+  if (USERS.some((u) => u.email === mail && u.role === 'owner')) fail(400, 'The owner signs in with Google. Use Continue with Google above.');
+  const user = USERS.find((u) => u.email === mail && u.role === 'staff');
   // Same message whether the email or the password is wrong.
   if (!user || !verifyPassword(password, user.passwordHash)) {
     const expired = f?.until && f.until <= Date.now();

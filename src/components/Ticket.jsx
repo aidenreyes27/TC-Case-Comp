@@ -2,12 +2,13 @@ import { time, until } from '../lib/format.js';
 
 const SHORT = { california: 'CALI', 'carne-asada': 'ASADA', carnitas: 'CARN' };
 
-export default function Ticket({ o, menu, now, onUnit, onClose, compact = false }) {
+export default function Ticket({ o, menu, now, onUnit, onClose, onStartNow, compact = false, isNew = false }) {
   const tone = o.readyAt ? 'bg-nopal' : o.atRisk || o.late ? 'bg-chile' : o.kind === 'group' ? 'bg-pacific' : 'bg-marigold';
   const name = o.kind === 'group' ? o.groupName : o.customerName || 'Walk-in';
   return (
-    <article className={`ticket clip-in w-full ${compact ? '' : 'sm:w-[17.5rem]'} shrink-0`} aria-label={`Ticket ${o.ticket}, ${name}`}>
+    <article className={`ticket clip-in relative w-full ${compact ? '' : 'sm:w-[17.5rem]'} shrink-0 ${isNew ? 'new-flash' : ''}`} aria-label={`Ticket ${o.ticket}, ${name}`}>
       <div className={`h-2 ${tone}`} />
+      {isNew && <span className="absolute bottom-6 right-3 rounded-md bg-marigold px-2 py-0.5 text-xs font-extrabold text-ink">New</span>}
       <div className="px-4 pt-3">
         <div className="flex items-start justify-between gap-2">
           <p className="font-display text-4xl font-extrabold leading-none">{o.ticket}</p>
@@ -38,6 +39,11 @@ export default function Ticket({ o, menu, now, onUnit, onClose, compact = false 
         </div>
       )}
       {compact && <p className="px-4 pt-1 text-sm text-ink/60">{o.burritos} burritos · {o.prepMins} prep min</p>}
+      {compact && onStartNow && ['locked', 'cooking'].includes(o.status) && (
+        <div className="px-4 pt-2">
+          <button className="btn-ghost w-full py-1.5 text-sm" onClick={() => onStartNow(o)}>Start now</button>
+        </div>
+      )}
 
       {!compact && o.units?.length > 0 && (
         <div className="mt-3 px-4">

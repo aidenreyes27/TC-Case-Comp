@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { money } from '../lib/format.js';
 
 // Mock checkout. Validates like a real form, charges nothing.
-export default function PayModal({ total, burritos, onPay, onClose }) {
-  const [f, setF] = useState({ cardName: '', cardNumber: '4242 4242 4242 4242', expiry: '08/28', cvc: '123' });
+export default function PayModal({ total, burritos, onPay, onClose, name = '' }) {
+  const [f, setF] = useState({ cardName: name, cardNumber: '4242 4242 4242 4242', expiry: '08/28', cvc: '123' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });

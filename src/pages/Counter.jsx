@@ -1,19 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Shell from '../components/Shell.jsx';
 import Ticket from '../components/Ticket.jsx';
 import { api } from '../api.js';
 import { usePoll, useDemoNow } from '../lib/hooks.js';
 import { money, time } from '../lib/format.js';
+import { chime, unlockAudio } from '../lib/chime.js';
 
 export default function Counter() {
   const { data: q, error, reload } = usePoll('/queue', 1500);
   const [menu, setMenu] = useState(null);
   const [toast, setToast] = useState(null);
+  const [autoCook, setAutoCook] = useState(null); // shows the tick right away instead of after the next refresh
   const now = useDemoNow();
   useEffect(() => { api.get('/menu').then((d) => setMenu(d.menu)); }, []);
 
+  // New-order alerts: flash the ticket, show a banner, and chime if sound is on.
+  const seen = useRef(null);
+  const ownIds = useRef(new Set()); // walk-ins rung up on this tablet don't alert
+  const [fresh, setFresh] = useState(new Set());
+  const [banner, setBanner] = useState(null);
+  const [sound, setSound] = useState(() => localStorage.getItem('bb-sound') === 'on');
+  useEffect(() => {
+    if (!q) return;
+    const all = [...q.cookNow, ...q.later, ...q.ready];
+    if (seen.current) {
+      const arrived = all.filter((o) => !seen.current.has(o.id) && !ownIds.current.has(o.id));
+      if (arrived.length) {
+        const ids = arrived.map((o) => o.id);
+        setFresh((f) => new Set([...f, ...ids]));
+        setTimeout(() => setFresh((f) => { const n = new Set(f); ids.forEach((i) => n.delete(i)); return n; }), 4000);
+        const g = arrived.find((o) => o.kind === 'group');
+        setBanner({
+          key: Date.now(),
+          text: arrived.length > 1 ? `${arrived.length} new orders`
+            : g ? `New group order · ${g.groupName} · ${g.burritos} burritos`
+            : `New walk-in · ticket ${arrived[0].ticket}`,
+          group: !!g,
+        });
+        setTimeout(() => setBanner(null), 3500);
+        if (sound) chime(g ? 'group' : 'walkin');
+      }
+    }
+    seen.current = new Set(all.map((o) => o.id));
+  }, [q, sound]);
+  const toggleSound = () => {
+    const next = !sound;
+    if (next) { unlockAudio(); chime(); }
+    setSound(next);
+    localStorage.setItem('bb-sound', next ? 'on' : 'off');
+  };
+  useEffect(() => { if (sound) { const u = () => unlockAudio(); window.addEventListener('pointerdown', u, { once: true }); return () => window.removeEventListener('pointerdown', u); } return undefined; }, [sound]);
+
   const flash = (text, bad = false) => { setToast({ text, bad }); setTimeout(() => setToast(null), 3500); };
-  const act = async (fn) => { try { await fn(); reload(); } catch (e) { flash(e.message, true); } };
+  const act = async (fn) => { try { await fn(); await reload(); } catch (e) { flash(e.message, true); } };
 
   async function rush(level) {
     try {
@@ -36,6 +75,10 @@ export default function Counter() {
             <span><b className="text-lg">{q.ready.length}</b> waiting for pickup</span>
           </div>
         )}
+        <button onClick={toggleSound} aria-pressed={sound}
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold ${sound ? 'bg-ink text-paper' : 'border-2 border-ink/15 bg-white'}`}>
+          {sound ? 'Sound on' : 'Sound off'}
+        </button>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border-2 border-dashed border-line p-3 text-sm">
@@ -45,7 +88,8 @@ export default function Counter() {
           <button key={k} className="btn-ghost px-3 py-1.5 text-sm" onClick={() => rush(k)}>{l}</button>
         ))}
         <label className="ml-auto flex cursor-pointer items-center gap-2 font-bold">
-          <input type="checkbox" className="h-5 w-5 accent-[#3F8F4E]" checked={!!q?.autoCook} onChange={(e) => act(() => api.post('/kitchen/auto-cook', { on: e.target.checked }))} />
+          <input type="checkbox" className="h-5 w-5 accent-[#3F8F4E]" checked={autoCook ?? !!q?.autoCook}
+            onChange={(e) => { const on = e.target.checked; setAutoCook(on); act(async () => { await api.post('/kitchen/auto-cook', { on }); }).finally(() => setAutoCook(null)); }} />
           Auto-cook (simulate the cooks)
         </label>
       </div>
@@ -62,21 +106,22 @@ export default function Counter() {
           <div className="-mt-1 flex flex-wrap gap-4 px-2">
             {q?.cookNow.length === 0 && <p className="py-10 text-ink/50">Nothing to cook right now. Ring up a walk-in or simulate a rush.</p>}
             {q?.cookNow.map((o) => (
-              <Ticket key={o.id} o={o} menu={menu} now={now}
+              <Ticket key={o.id} o={o} menu={menu} now={now} isNew={fresh.has(o.id)}
                 onUnit={(ord, u) => act(() => api.post(`/orders/${ord.id}/units/${u.id}`))} />
             ))}
           </div>
 
           <h2 className="mt-10 text-2xl font-extrabold">Booked ahead</h2>
-          <p className="text-sm text-ink/60">Group orders that move to Cook next when it’s time to start them.</p>
+          <p className="text-sm text-ink/60">Group orders move to Cook next when it’s time to start them. Paid orders can be started early with Start now.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {q?.later.length === 0 && <p className="text-ink/50">No upcoming group orders.</p>}
-            {q?.later.map((o) => <Ticket key={o.id} o={o} menu={menu} now={now} compact />)}
+            {q?.later.map((o) => <Ticket key={o.id} o={o} menu={menu} now={now} compact isNew={fresh.has(o.id)}
+              onStartNow={(ord) => act(() => api.post(`/orders/${ord.id}/start-now`))} />)}
           </div>
         </section>
 
         <aside className="space-y-6">
-          <WalkIn menu={menu} onDone={(o) => { flash(`Ticket ${o.ticket} added · ${money(o.total)}`); reload(); }} onError={(m) => flash(m, true)} />
+          <WalkIn menu={menu} onDone={(o) => { ownIds.current.add(o.id); flash(`Ticket ${o.ticket} added · ${money(o.total)}`); reload(); }} onError={(m) => flash(m, true)} />
           <section aria-label="Ready for pickup">
             <h2 className="text-2xl font-extrabold">Ready for pickup</h2>
             <div className="mt-3 space-y-3">
@@ -89,6 +134,13 @@ export default function Counter() {
         </aside>
       </div>
 
+      {banner && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-4">
+          <div key={banner.key} role="alert" className={`clip-in rounded-2xl px-6 py-3 font-display text-xl font-bold shadow-2xl ${banner.group ? 'bg-pacific text-white' : 'bg-marigold text-ink'}`}>
+            {banner.text}
+          </div>
+        </div>
+      )}
       {toast && <div role="status" className={`fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl px-5 py-3 font-bold shadow-xl ${toast.bad ? 'bg-chile text-white' : 'bg-ink text-paper'}`}>{toast.text}</div>}
     </Shell>
   );

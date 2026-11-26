@@ -150,6 +150,7 @@ export function liveRush({ level = 'normal', seed } = {}) {
     try {
       const g = createGroup(bot, { groupName: name, groupType, slot });
       g.leadName = r.pick(NAMES) + ' (crew lead)';
+      g.simulated = true;
       const people = r.int(5, 14);
       for (let k = 0; k < people; k++) {
         try { addLine(g.code, { personName: r.pick(NAMES), itemId: r.weighted(MIX), qty: 1 }); }

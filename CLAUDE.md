@@ -32,4 +32,5 @@ Success metric: group on-time rate from 43% (2019) to 85%+. Lunch on-time 82% to
 - `npm install`
 - `npm run dev` – API on :3001 and web on :5173 (Vite proxies /api)
 - `npm test` – backend rule tests
+- `npm run demo` – build and serve everything from :3001 (no auto-restart); `npm run tunnel` – public https link for phones (see DEMO.md)
 - `npm run build` – production build of the frontend

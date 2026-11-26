@@ -31,5 +31,9 @@
   }
 }
 
+/* New order on the counter: a marigold glow that pulses a few times, then stops. */
+@keyframes new-flash { 0%, 100% { background-color: theme('colors.ticket'); } 50% { background-color: #FBE3A9; } }
+.new-flash { animation: clip-in 260ms ease-out both, new-flash 900ms ease-in-out 4; }
+
 @keyframes clip-in { from { transform: translateY(-14px) rotate(-1.5deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .clip-in { animation: clip-in 260ms ease-out both; }

@@ -15,7 +15,7 @@ async function call(method, path, body) {
   if (res.status === 401 && token && !path.startsWith('/auth/')) {
     // Token expired or the server restarted: send them back to sign in.
     setSession(null);
-    window.location.assign('/?expired=1');
+    window.location.assign(`/?expired=1&next=${encodeURIComponent(window.location.pathname)}`);
   }
   if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
   return data;

@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { initAuth, signIn, signInWithSupabase, userFromToken, signOut } from './auth.js';
@@ -16,20 +17,24 @@ const fakeSupabase = (user, ok = true) => async (url, opts) => {
 };
 const TOKEN = 'x'.repeat(40);
 
-test('staff sign in with password and get a working session', () => {
-  const s = signIn({ email: 'AidenReyes27@Berkeley.edu', password: 'test-password-1' });
-  assert.equal(s.user.role, 'owner');
+test('counter signs in with password and gets a working session', () => {
+  const s = signIn({ email: 'Counter@BurritoBarrio.com', password: 'test-password-1' });
+  assert.equal(s.user.role, 'staff');
   assert.equal(s.user.passwordHash, undefined);
-  assert.equal(userFromToken(s.token).email, 'aidenreyes27@berkeley.edu');
+  assert.equal(userFromToken(s.token).email, 'counter@burritobarrio.com');
   signOut(s.token);
   assert.equal(userFromToken(s.token), null);
 });
 
 test('wrong password gets one generic message, then a lockout', () => {
   for (let i = 0; i < 5; i++) {
-    assert.throws(() => signIn({ email: 'counter@burritobarrio.com', password: 'nope' }), /incorrect/);
+    assert.throws(() => signIn({ email: 'other@burritobarrio.com', password: 'nope' }), /incorrect/);
   }
-  assert.throws(() => signIn({ email: 'counter@burritobarrio.com', password: 'test-password-1' }), /Too many attempts/);
+  assert.throws(() => signIn({ email: 'other@burritobarrio.com', password: 'test-password-1' }), /Too many attempts/);
+});
+
+test('the owner has no password; the form points them to Google', () => {
+  assert.throws(() => signIn({ email: 'aidenreyes27@berkeley.edu', password: 'test-password-1' }), /Continue with Google/);
 });
 
 test('Google sign-in through Supabase creates a crew lead', async () => {

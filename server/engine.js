@@ -30,7 +30,9 @@ export function makeUnits(order) {
 export const remainingWork = (o) => o.units.reduce((s, u) => s + (u.doneAt ? 0 : u.workLeft), 0);
 
 export function priorityOf(order, staffBySlot) {
-  return latestStart(order.dueAt, remainingWork(order), staffAt(order.dueAt, staffBySlot));
+  const ls = latestStart(order.dueAt, remainingWork(order), staffAt(order.dueAt, staffBySlot));
+  // "Start now" treats the order as if it had to start the moment staff pressed it.
+  return order.startNowAt ? Math.min(ls, order.startNowAt) : ls;
 }
 
 // policy 'fcfs' = pen-and-paper (first ticket in, first cooked)
@@ -38,7 +40,7 @@ export function priorityOf(order, staffBySlot) {
 export function cookable(order, t, policy, staffBySlot) {
   if (order.visibleAt > t || order.readyAt || !order.units?.length) return false;
   if (order.kind === 'group' && order.status === 'open') return false;
-  if (policy === 'fcfs' || order.kind === 'walkin') return true;
+  if (policy === 'fcfs' || order.kind === 'walkin' || order.startNow) return true;
   return t >= priorityOf(order, staffBySlot) - EARLY_START_MINS * MIN;
 }
 

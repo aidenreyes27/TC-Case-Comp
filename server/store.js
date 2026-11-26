@@ -74,13 +74,25 @@ function assertCapacity(slot, extraPrep) {
 const fmt = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
 // ---------- group orders ----------
-function groupMeta(o) {
-  const staff = staffAt(o.dueAt, db.staffBySlot);
-  return { lockAt: lockTime(o.dueAt, Math.max(prepMinsFor(o.lines), 3), staff) };
+function lockFor(dueAt, lines) {
+  return lockTime(dueAt, Math.max(prepMinsFor(lines), 3), staffAt(dueAt, db.staffBySlot));
+}
+function groupMeta(o) { return { lockAt: lockFor(o.dueAt, o.lines) }; }
+
+// Adding burritos means more prep, which pulls the "changes close" time earlier.
+// Refuse any change that would pull it into the past, instead of accepting the
+// burrito and then blocking payment.
+function assertStillTime(o, lines, dueAt = o.dueAt) {
+  const lockAt = lockFor(dueAt, lines);
+  if (now() >= lockAt) {
+    const n = burritoCount(lines);
+    fail(409, `${n} burritos is too many for the kitchen to make by ${fmt(dueAt)} from now. Ask ${o.leadName} to move the pickup later, or pay for what’s already in.`);
+  }
 }
 
 export function createGroup(user, { groupName, groupType, slot }) {
-  if (!user || user.role === 'staff') fail(403, 'Sign in as a crew lead or owner to start a group order.');
+  if (!user) fail(401, 'Your session ended. Sign in again.');
+  if (user.role === 'staff') fail(403, 'Sign in as a crew lead or owner to start a group order.');
   const name = String(groupName ?? '').trim();
   if (name.length < 2 || name.length > 50) fail(400, 'Give the group a name (2–50 characters).');
   const types = ['construction', 'military', 'office', 'students', 'other'];
@@ -119,6 +131,7 @@ export function addLine(code, { personName, itemId, qty, note }) {
   if (burritoCount(o.lines) + q > SETTINGS.maxGroupSize) fail(400, `Group orders max out at ${SETTINGS.maxGroupSize} burritos. Start a second order for the rest.`);
   const n = String(note ?? '').trim().slice(0, 80);
   assertCapacity(o.slot, q * menuById[itemId].prepMins);
+  assertStillTime(o, [...o.lines, { itemId, qty: q }]);
   const line = { id: newId('l'), personName: person, itemId, qty: q, note: n, addedAt: now() };
   o.lines.push(line);
   return o;
@@ -134,11 +147,13 @@ export function removeLine(code, lineId) {
 
 export function moveGroup(user, code, slot) {
   const o = findByCode(code); mustOpen(o);
-  if (o.leadId !== user?.id && user?.role !== 'owner') fail(403, 'Only the crew lead can change the pickup time.');
+  if (!user) fail(401, 'Your session ended. Sign in again.');
+  if (o.leadId !== user.id && user.role !== 'owner') fail(403, 'Only the crew lead can change the pickup time.');
   const s = slotsView().find((x) => x.time === slot);
   if (!s || !s.bookable) fail(400, 'That pickup time isn’t available.');
   if (slot === o.slot) return o;
   if (s.availableMins < prepMinsFor(o.lines)) fail(409, `${fmt(s.startAt)} doesn’t have room for ${burritoCount(o.lines)} burritos.`);
+  assertStillTime(o, o.lines, s.startAt);
   o.slot = slot; o.dueAt = s.startAt;
   return o;
 }
@@ -146,7 +161,8 @@ export function moveGroup(user, code, slot) {
 // Mock payment: validates the form like a real checkout, never charges anything.
 export function payAndSubmit(user, code, { cardName, cardNumber, expiry, cvc }) {
   const o = findByCode(code); mustOpen(o);
-  if (o.leadId !== user?.id && user?.role !== 'owner') fail(403, 'Only the crew lead can pay for this order.');
+  if (!user) fail(401, 'Your session ended. Sign in again, then pay.');
+  if (o.leadId !== user.id && user.role !== 'owner') fail(403, 'Only the crew lead can pay for this order.');
   if (!o.lines.length) fail(400, 'Add at least one burrito before paying.');
   const digits = String(cardNumber ?? '').replace(/\s+/g, '');
   if (String(cardName ?? '').trim().length < 2) fail(400, 'Enter the name on the card.');
@@ -203,6 +219,18 @@ export function toggleUnit(user, orderId, unitId) {
   if (u.doneAt) { u.doneAt = null; u.workLeft = menuById[u.itemId].prepMins; o.readyAt = null; o.status = 'locked'; }
   else { u.doneAt = now(); u.workLeft = 0; }
   refreshStatus(o);
+  return o;
+}
+
+// Kitchen has slack: pull a booked group order forward and start it early.
+export function startNow(user, orderId) {
+  if (!['owner', 'staff'].includes(user?.role)) fail(403, 'Staff only.');
+  const o = byId(orderId);
+  if (o.kind !== 'group') fail(400, 'Walk-ins are already in the queue.');
+  if (o.status === 'open') fail(409, 'This group hasn’t paid yet, so it can’t be cooked.');
+  if (!['locked', 'cooking'].includes(o.status)) fail(409, 'This order is already done.');
+  o.startNow = true;
+  o.startNowAt = now();
   return o;
 }
 

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import ReadyAlerts from '../components/ReadyAlerts.jsx';
 import Shell from '../components/Shell.jsx';
 import BurritoPicker from '../components/BurritoPicker.jsx';
 import SlotPicker from '../components/SlotPicker.jsx';
@@ -9,12 +10,89 @@ import { usePoll, useDemoNow } from '../lib/hooks.js';
 import { money, slotLabel, time, until, GROUP_TYPES } from '../lib/format.js';
 import { STATUS } from './LeadHome.jsx';
 
-const mine = (code) => JSON.parse(localStorage.getItem(`bb-lines-${code}`) ?? '[]');
-const rememberLine = (code, id) => localStorage.setItem(`bb-lines-${code}`, JSON.stringify([...mine(code), id]));
+// "Join as crew member" (?as=member) keeps its own record of what it added, so the
+// lead tab and the member tab in the same browser behave like two different people.
+const memberMode = () => new URLSearchParams(window.location.search).get('as') === 'member';
+const suffix = () => (memberMode() ? '-member' : '');
+const mine = (code) => JSON.parse(localStorage.getItem(`bb-lines-${code}${suffix()}`) ?? '[]');
+const rememberLine = (code, id) => localStorage.setItem(`bb-lines-${code}${suffix()}`, JSON.stringify([...mine(code), id]));
+
+// Watches the order as it polls and reports what other people added or removed,
+// so the crew lead sees each burrito land without refreshing.
+function useLineActivity(lines, menu, code) {
+  const prev = useRef(null);
+  const [events, setEvents] = useState([]);
+  const [fresh, setFresh] = useState(new Set());
+  useEffect(() => {
+    const byId = new Map(lines.map((l) => [l.id, l]));
+    if (prev.current) {
+      const own = new Set(mine(code));
+      const name = (id) => menu.find((m) => m.id === id)?.name ?? 'burrito';
+      const added = lines.filter((l) => !prev.current.has(l.id) && !own.has(l.id));
+      const removed = [...prev.current.values()].filter((l) => !byId.has(l.id) && !own.has(l.id));
+      const next = [
+        ...added.map((l) => ({ id: `a${l.id}`, ok: true, text: `${l.personName} added ${l.qty} × ${name(l.itemId)}` })),
+        ...removed.map((l) => ({ id: `r${l.id}`, ok: false, text: `${l.personName}’s ${name(l.itemId)} was removed` })),
+      ];
+      if (next.length) {
+        setEvents((e) => [...e, ...next].slice(-4));
+        next.forEach((ev) => setTimeout(() => setEvents((e) => e.filter((x) => x.id !== ev.id)), 5000));
+      }
+      if (added.length) {
+        const ids = added.map((l) => l.id);
+        setFresh((f) => new Set([...f, ...ids]));
+        setTimeout(() => setFresh((f) => { const n = new Set(f); ids.forEach((i) => n.delete(i)); return n; }), 6000);
+      }
+    }
+    prev.current = byId;
+  }, [lines, menu, code]);
+  return { events, fresh };
+}
+
+function ActivityToasts({ events }) {
+  return (
+    <div className="pointer-events-none fixed bottom-5 right-5 z-40 flex w-80 max-w-[calc(100vw-2.5rem)] flex-col gap-2" aria-live="polite">
+      {events.map((e) => (
+        <div key={e.id} className={`clip-in rounded-xl px-4 py-3 font-bold shadow-xl ${e.ok ? 'bg-ink text-paper' : 'bg-white text-chile'}`}>
+          {e.ok && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-nopal align-middle" />}{e.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// What this person added from this browser, so they can see it went through.
+function YoureIn({ o, menu, code, onRemove }) {
+  const ids = new Set(mine(code));
+  const lines = o.lines.filter((l) => ids.has(l.id));
+  if (!lines.length) return null;
+  const name = (id) => menu.find((m) => m.id === id)?.name;
+  const total = lines.reduce((s, l) => s + menu.find((m) => m.id === l.itemId).price * l.qty, 0);
+  const sent = o.status !== 'open';
+  return (
+    <div id="youre-in" className="scroll-mt-24 rounded-2xl border-2 border-nopal bg-nopal/10 p-4">
+      <p className="font-display text-xl font-bold text-nopal">You’re in</p>
+      <ul className="mt-1 space-y-1">
+        {lines.map((l) => (
+          <li key={l.id} className="flex items-center justify-between gap-2">
+            <span><b>{l.qty} × {name(l.itemId)}</b> for {l.personName}{l.note && <span className="text-ink/60"> · {l.note}</span>}</span>
+            {!sent && onRemove && <button onClick={() => onRemove(l.id)} className="text-sm font-bold text-chile hover:underline">Remove</button>}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-sm text-ink/70">
+        {sent ? `Sent to the kitchen. Pickup at ${slotLabel(o.slot)} with ${o.leadName}.` : `${money(total)} · ${o.leadName} pays for the group and sends it to the kitchen before changes close.`}
+      </p>
+    </div>
+  );
+}
 
 export default function GroupOrder() {
   const { code } = useParams();
-  const { data: o, error, setData } = usePoll(`/groups/${code}`, 2000);
+  const { data: raw, error, setData } = usePoll(`/groups/${code}`, 2000);
+  const [params] = useSearchParams();
+  const asMember = params.get('as') === 'member' && raw?.isLead;
+  const o = raw && asMember ? { ...raw, isLead: false } : raw;
   const [menu, setMenu] = useState(null);
   const now = useDemoNow();
   useEffect(() => { api.get('/menu').then((d) => setMenu(d.menu)); }, []);
@@ -27,18 +105,45 @@ export default function GroupOrder() {
   const [label, cls] = STATUS[o.status];
   return (
     <Shell>
+      {asMember && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl bg-pacific px-4 py-3 text-white">
+          <p className="mr-auto font-bold">You’re viewing as a crew member. This is what your crew sees from the link.</p>
+          <Link to={`/g/${code}`} className="rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-pacific">Back to lead view</Link>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-ink/60">{GROUP_TYPES[o.groupType]} · led by {o.leadName}</p>
           <h1 className="text-4xl font-extrabold sm:text-5xl">{o.groupName}</h1>
           <p className="mt-2 text-lg">Pickup at <b>{slotLabel(o.slot)}</b> · {o.burritos} burritos · {money(o.total)}</p>
         </div>
-        <span className={`rounded-full px-4 py-1.5 font-bold ${cls}`}>{label}</span>
+        <div className="flex flex-col items-end gap-2">
+          <span className={`rounded-full px-4 py-1.5 font-bold ${cls}`}>{label}</span>
+          <CodeChip code={o.code} />
+          {o.isLead && <ReadyAlerts />}
+        </div>
       </div>
 
       {o.status === 'open' ? <OpenOrder o={o} menu={menu} now={now} onChange={setData} code={code} />
-        : <Tracker o={o} menu={menu} now={now} />}
+        : <Tracker o={o} menu={menu} now={now} code={code} />}
     </Shell>
+  );
+}
+
+// The order code stays visible in every state, so it can be read out or texted any time.
+function CodeChip({ code }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(`${window.location.origin}/g/${code}`);
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button onClick={copy} title="Copy the link to this order"
+      className="flex items-center gap-2 rounded-xl border-2 border-ink/15 bg-white px-3 py-1.5 hover:border-ink/40">
+      <span className="text-sm text-ink/60">Code</span>
+      <span className="font-display text-lg font-extrabold tracking-[0.2em]">{code}</span>
+      <span className="text-sm font-bold text-pacific">{copied ? 'Copied' : 'Copy link'}</span>
+    </button>
   );
 }
 
@@ -50,6 +155,9 @@ function OpenOrder({ o, menu, now, onChange, code }) {
   const link = `${window.location.origin}/g/${o.code}`;
   const minsLeft = Math.round((o.lockAt - now) / 60000);
   const urgent = minsLeft <= 10;
+  const { events, fresh } = useLineActivity(o.lines, menu, code);
+  const people = new Set(o.lines.map((l) => l.personName)).size;
+  const lastAdded = o.lines.length ? Math.max(...o.lines.map((l) => l.addedAt)) : null;
 
   const byPerson = useMemo(() => {
     const m = new Map();
@@ -81,10 +189,14 @@ function OpenOrder({ o, menu, now, onChange, code }) {
               <input readOnly value={link} className="field font-mono text-sm" onFocus={(e) => e.target.select()} aria-label="Share link" />
               <button className="btn-dark whitespace-nowrap" onClick={() => { navigator.clipboard?.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? 'Copied' : 'Copy link'}</button>
             </div>
-            <p className="mt-2 text-sm text-ink/60">Code <b className="tracking-widest">{o.code}</b></p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+              <p className="text-sm text-ink/60">Want to see what they see, or add a burrito as a crew member?</p>
+              <a href={`/g/${o.code}?as=member`} target="_blank" rel="noreferrer" className="btn-ghost px-3 py-1.5 text-sm">Join as crew member</a>
+            </div>
           </div>
         )}
 
+        {!o.isLead && <YoureIn o={o} menu={menu} code={code} onRemove={remove} />}
         <AddLine code={code} menu={menu} onAdded={onChange} />
 
       </div>
@@ -93,15 +205,19 @@ function OpenOrder({ o, menu, now, onChange, code }) {
         <div className="ticket px-5 pt-5">
           <div className="flex items-baseline justify-between">
             <p className="font-display text-xl font-bold">The order</p>
-            <p className="text-sm text-ink/60">#{o.ticket}</p>
+            <p className="flex items-center gap-1.5 text-sm text-ink/60">
+              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-nopal opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-nopal" /></span>
+              Live · #{o.ticket}
+            </p>
           </div>
+          {o.lines.length > 0 && <p className="text-sm text-ink/60">{people} {people === 1 ? 'person' : 'people'} so far · last added {until(lastAdded, now) === 'now' ? 'just now' : until(lastAdded, now)}</p>}
           {byPerson.length === 0 && <p className="py-8 text-center text-ink/50">No burritos yet. Add yours first, then share the link.</p>}
           <ul className="mt-3 divide-y divide-dashed divide-line">
             {byPerson.map(([person, lines]) => (
               <li key={person} className="py-2.5">
                 <p className="font-bold">{person}</p>
                 {lines.map((l) => (
-                  <div key={l.id} className="flex items-center justify-between text-sm">
+                  <div key={l.id} className={`-mx-2 flex items-center justify-between rounded-md px-2 text-sm transition-colors duration-1000 ${fresh.has(l.id) ? 'bg-marigold/30' : ''}`}>
                     <span>{l.qty} × {menu.find((m) => m.id === l.itemId).name}{l.note && <span className="text-ink/50"> · {l.note}</span>}</span>
                     {(o.isLead || mine(code).includes(l.id)) && (
                       <button onClick={() => remove(l.id)} className="font-bold text-chile hover:underline" aria-label={`Remove ${person}'s burrito`}>Remove</button>
@@ -124,14 +240,15 @@ function OpenOrder({ o, menu, now, onChange, code }) {
         {!o.isLead && !getUser() && <p className="text-center text-sm text-ink/50">Running a crew? <Link to="/" className="font-bold underline">Start your own group order</Link></p>}
       </aside>
 
-      {paying && <PayModal total={o.total} burritos={o.burritos} onClose={() => setPaying(false)}
+      <ActivityToasts events={events} />
+      {paying && <PayModal total={o.total} burritos={o.burritos} name={getUser()?.name ?? ''} onClose={() => setPaying(false)}
         onPay={async (card) => { onChange(await api.post(`/groups/${code}/pay`, card)); setPaying(false); }} />}
     </div>
   );
 }
 
 function AddLine({ code, menu, onAdded }) {
-  const [personName, setPerson] = useState(localStorage.getItem('bb-name') ?? '');
+  const [personName, setPerson] = useState(localStorage.getItem(`bb-name${suffix()}`) ?? '');
   const [itemId, setItem] = useState(menu[0].id);
   const [qty, setQty] = useState(1);
   const [note, setNote] = useState('');
@@ -142,9 +259,10 @@ function AddLine({ code, menu, onAdded }) {
     e.preventDefault(); setBusy(true); setMsg(null);
     try {
       const o = await api.post(`/groups/${code}/lines`, { personName, itemId, qty, note });
-      localStorage.setItem('bb-name', personName);
+      localStorage.setItem(`bb-name${suffix()}`, personName);
       rememberLine(code, o.lines[o.lines.length - 1].id);
       onAdded(o); setQty(1); setNote('');
+      setTimeout(() => document.getElementById('youre-in')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
       setMsg({ ok: true, text: `Added ${qty} ${menu.find((m) => m.id === itemId).name} for ${personName}.` });
     } catch (err) { setMsg({ ok: false, text: err.message }); }
     finally { setBusy(false); }
@@ -174,7 +292,7 @@ function AddLine({ code, menu, onAdded }) {
 
 const STEPS = [['locked', 'Sent to kitchen'], ['cooking', 'Cooking'], ['ready', 'Ready for pickup'], ['picked_up', 'Picked up']];
 
-function Tracker({ o, menu, now }) {
+function Tracker({ o, menu, now, code }) {
   if (o.status === 'released') {
     return <div className="panel mt-6"><p className="font-display text-2xl font-bold">This order was released</p><p className="mt-1 text-ink/60">It wasn’t paid before changes closed, so the slot went back to the kitchen. Start a new order for a later time.</p></div>;
   }
@@ -183,6 +301,7 @@ function Tracker({ o, menu, now }) {
   const pct = o.burritos ? Math.round((o.done / o.burritos) * 100) : 0;
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+      {!o.isLead && <div className="lg:col-span-2"><YoureIn o={o} menu={menu} code={code} /></div>}
       <div className="panel">
         <p className="font-display text-lg font-bold text-ink/60">Live from the kitchen</p>
         <p className="mt-1 font-display text-6xl font-extrabold">{o.done}<span className="text-ink/30"> / {o.burritos}</span></p>

@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { summarize, parseBrief } from './ai.js';
